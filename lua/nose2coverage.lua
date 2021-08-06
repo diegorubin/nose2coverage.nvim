@@ -62,7 +62,6 @@ end
 
 function M.draw(buf)
     if M.coverage_report_exists() and enabled then
-        vim.api.nvim_echo({{"Enabled"}}, false, {})
         M.parse_report()
 
         local filename = vim.api.nvim_buf_get_name(buf)
