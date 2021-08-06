@@ -1,11 +1,11 @@
 local xml2lua = require("ext.xml2lua")
 local handler = require("ext.xmlhandler.tree")
-
 local M = {}
 
 local coverage
 local ft
 local coverage_report
+local enabled
 
 vim.fn.sign_define('Nose2CoverageHit',
                    {text = "+", texthl = '', linehl = '', numhl = ''})
@@ -25,28 +25,33 @@ end
 function M.setup(c)
     ft = c.ft or '*.py'
     coverage_report = c.coverage_report or 'coverage.xml'
+    enabled = c.enabled
+
+    vim.api.nvim_command('autocmd BufEnter ' .. ft ..
+                             ' lua require("nose2coverage").draw(0)')
+    vim.api.nvim_command('autocmd InsertLeave ' .. ft ..
+                             ' lua require("nose2coverage").redraw(0)')
+    vim.api.nvim_command('autocmd TextChanged ' .. ft ..
+                             ' lua require("nose2coverage").redraw(0)')
+    vim.api.nvim_command('autocmd TextChangedI ' .. ft ..
+                             ' lua require("nose2coverage").redraw(0)')
 end
 
 function M.parse_report()
-    local report_file = io.open(coverage_report)
-    local xml = report_file:read("*a")
-    report_file:close()
-
-    local parser = xml2lua.parser(handler)
-    parser:parse(xml)
-
     coverage = {}
 
-    if handler.root.coverage.packages then
-        for _, package in pairs(handler.root.coverage.packages.package) do
-            for _, class in pairs(package.classes.class) do
-                if class._attr then
-                    coverage[class._attr.filename] = {}
-                    for _, lines in pairs(class.lines) do
-                        for _, line in pairs(lines) do
-                            coverage[class._attr.filename][line._attr["number"]] =
-                                line._attr["hits"]
-                        end
+    local coverage_handler = handler:new()
+    local parser = xml2lua.parser(coverage_handler)
+    parser:parse(xml2lua.loadFile(coverage_report))
+
+    for _, package in pairs(coverage_handler.root.coverage.packages.package) do
+        for _, class in pairs(package.classes.class) do
+            if class._attr then
+                coverage[class._attr.filename] = {}
+                for _, lines in pairs(class.lines) do
+                    for _, line in pairs(lines) do
+                        coverage[class._attr.filename][line._attr["number"]] =
+                            line._attr["hits"]
                     end
                 end
             end
@@ -56,7 +61,8 @@ function M.parse_report()
 end
 
 function M.draw(buf)
-    if M.coverage_report_exists() then
+    if M.coverage_report_exists() and enabled then
+        vim.api.nvim_echo({{"Enabled"}}, false, {})
         M.parse_report()
 
         local filename = vim.api.nvim_buf_get_name(buf)
@@ -79,11 +85,27 @@ function M.draw(buf)
     end
 end
 
-function M.clear(buf) end
+function M.clear(buf)
+    local buffer = vim.api.nvim_buf_get_name(buf)
+    for _, sign in ipairs(vim.fn.sign_getplaced(buffer,
+                                                {group = "nose2coverage"})) do
+        vim.fn.sign_unplace("nose2coverage", {buffer = buffer, id = sign.id})
+    end
+end
 
-function M.display(buf)
+function M.redraw(buf)
     M.clear(buf)
     M.draw(buf)
+end
+
+function M.display()
+    enabled = true
+    M.redraw(vim.api.nvim_get_current_buf())
+end
+
+function M.hide()
+    enabled = false
+    M.redraw(vim.api.nvim_get_current_buf())
 end
 
 return M
