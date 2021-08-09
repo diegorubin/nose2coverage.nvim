@@ -63,10 +63,7 @@ end
 function M.draw(buf)
     if M.coverage_report_exists() and enabled then
         M.parse_report()
-
-        local filename = vim.api.nvim_buf_get_name(buf)
-        filename = filename:gsub(vim.fn.getcwd():gsub("%-", ".") .. "/", "")
-
+        local filename = M.getfilename(buf)
         if coverage[filename] then
             for line, hits in pairs(coverage[filename]) do
                 if hits == "0" then
@@ -95,6 +92,30 @@ end
 function M.redraw(buf)
     M.clear(buf)
     M.draw(buf)
+end
+
+function M.getfilename(buf)
+    local filename = vim.api.nvim_buf_get_name(buf)
+    return filename:gsub(vim.fn.getcwd():gsub("%-", ".") .. "/", "")
+end
+
+function M.total_coverage()
+    local buf = vim.api.nvim_get_current_buf()
+    if M.coverage_report_exists() and enabled then
+        M.parse_report()
+        local filename = M.getfilename(buf)
+        if coverage[filename] then
+            local covered = 0
+            local total = 0
+            for _, hits in pairs(coverage[filename]) do
+                total = total + 1
+
+                if hits ~= "0" then covered = covered + 1 end
+            end
+            return tostring(math.floor(covered / total * 100)) .. "%%"
+        end
+    end
+    return "N/A"
 end
 
 function M.display()
